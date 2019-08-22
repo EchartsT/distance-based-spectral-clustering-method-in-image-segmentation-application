@@ -29,7 +29,7 @@ from skimage.segmentation import mark_boundaries, find_boundaries
 from skimage.io import imsave
 
 import pylab as pl
-from os.path import join
+
 import os
 
 from numpy import linalg as LA
@@ -40,51 +40,50 @@ from scipy.spatial import distance
 from skimage.feature.texture import local_binary_pattern
 import time
 import warnings
+import getLabels
+
+
 
 
 def EM_method(img_path, sp_met='felzenszwalb', graph_met='syn_met', admm_met='admm', num_cuts=3, dist_hist=False, lambda_coff=False, n_iter=1000, K=None, EM_iter=3):
    
     m_img = imread(img_path)
-    
+    result_first = []
     # superpixels method
-    if sp_met == 'felzenszwalb':
-        segments = felzenszwalb(m_img, scale=10, sigma=0.5, min_size=100)
-    elif sp_met == 'slic':
-        segments = slic(m_img, compactness=30, n_segments=400)
-    else:
-        warnings.warn("Warning Message: no superpixels method parameter")
-        
-    ave_position = init_sp(m_img, segments)
-        
-    ev, distance_matrix = syn_graph_met(m_img, segments, lambda_coff=lambda_coff, dist_hist=dist_hist)   
-    
+    # if sp_met == 'felzenszwalb':
+    #     segments = felzenszwalb(m_img, scale=10, sigma=0.5, min_size=100)
+    # elif sp_met == 'slic':
+    #     segments = slic(m_img, compactness=30, n_segments=400)
+    # else:
+    #     warnings.warn("Warning Message: no superpixels method parameter")
+
+    segments = getLabels.get_labels(img_path)  # 超像素分割结果
+
+    ave_position = init_sp(m_img, segments)  #超像素的位置--像素块中所有像素的位置均值
+    #ev:第一个特征向量 distance_matrix:距离矩阵
+    ev, distance_matrix = syn_graph_met(m_img, segments, lambda_coff=lambda_coff, dist_hist=dist_hist)
 
     iteration = 0
     while iteration < EM_iter:
         # iterate step1 and step2
         
         # global segmentation, return labels
-        
         vals, vectors = np.linalg.eigh(distance_matrix)
         vals, vectors = np.real(vals), np.real(vectors)
         index1 = np.argsort(vals)[0]
         ev = vectors[:, index1]
-
         sp_label = admm(n_vector=ev, n_iter=n_iter, num_cuts=num_cuts)
         p_label, labels = pixels_label(m_img, segments, sp_label)
-    
-    
+
         # local constraint, return distance matrix
 #         if not K:
 #              K = 50
-        distance_matrix = local_constraint(distance_matrix, ave_position, K, sp_label)
-        
+        distance_matrix = local_constraint(distance_matrix, ave_position, K, sp_label) #把距离较远的点之间的距离设置为零
         iteration += 1
-
+        if (iteration==1):
+            result_first = p_label
         # plot
-
-            
-    return p_label
+    return p_label,result_first
 
         
 def local_constraint(distance_matrix, ave_position, K, sp_label):
@@ -97,6 +96,7 @@ def local_constraint(distance_matrix, ave_position, K, sp_label):
                 distance_matrix[i, j] = diff
             
     return distance_matrix
+
 
 
 def init_sp(image, segments):
@@ -130,27 +130,27 @@ def init_sp(image, segments):
         pixel_position = np.asarray(pixel_position)
         ave_position.append((sum(pixel_position) / len(pixel_position)).tolist())
         
-    # generate average color value and red, green, blue color values
-    average = []
-    red_average = []
-    green_average = []
-    blue_average = []
-    for i in range(len(position)):
-        val = 0
-        red_val = 0
-        green_val = 0
-        blue_val = 0
-        for j in position[i]:
-            [m, n] = j
-            val += 0.299*image[m, n, 0] + 0.587*image[m, n, 1] + 0.114*image[m, n, 2]
-            red_val += image[m, n, 0]
-            green_val += image[m, n, 1]
-            blue_val += image[m, n, 2]
-            # val += image[m, n]
-        average.append(val/len(position[i]))
-        red_average.append(red_val/len(position[i]))
-        green_average.append(green_val/len(position[i]))
-        blue_average.append(blue_val/len(position[i]))
+    # # generate average color value and red, green, blue color values
+    # average = []
+    # red_average = []
+    # green_average = []
+    # blue_average = []
+    # for i in range(len(position)):
+    #     val = 0
+    #     red_val = 0
+    #     green_val = 0
+    #     blue_val = 0
+    #     for j in position[i]:
+    #         [m, n] = j
+    #         val += 0.299*image[m, n, 0] + 0.587*image[m, n, 1] + 0.114*image[m, n, 2]
+    #         red_val += image[m, n, 0]
+    #         green_val += image[m, n, 1]
+    #         blue_val += image[m, n, 2]
+    #         # val += image[m, n]
+    #     average.append(val/len(position[i]))
+    #     red_average.append(red_val/len(position[i]))
+    #     green_average.append(green_val/len(position[i]))
+    #     blue_average.append(blue_val/len(position[i]))
     
     return ave_position
 
@@ -159,13 +159,13 @@ def image_seg(img_path, sp_met='felzenszwalb', graph_met='syn_met', admm_met='ad
     m_img = imread(img_path)
     
     # superpixels method
-    if sp_met == 'felzenszwalb':
-        segments = felzenszwalb(m_img, scale=10, sigma=0.5, min_size=100)
-    elif sp_met == 'slic':
-        segments = slic(m_img, compactness=30, n_segments=400)
-    else:
-        warnings.warn("Warning Message: no superpixels method parameter")
-   
+    # if sp_met == 'felzenszwalb':
+    #     segments = felzenszwalb(m_img, scale=10, sigma=0.5, min_size=100)
+    # elif sp_met == 'slic':
+    #     segments = slic(m_img, compactness=30, n_segments=400)
+    # else:
+    #     warnings.warn("Warning Message: no superpixels method parameter")
+    segments = getLabels.get_labels(img_path)  # 超像素分割结果
 
     # generate graph matrix
     if graph_met == 'lib_met':
@@ -185,13 +185,12 @@ def image_seg(img_path, sp_met='felzenszwalb', graph_met='syn_met', admm_met='ad
         ev1, ev, ev3 = vectors[:, index1], vectors[:, index2], vectors[:, index3]
         
     elif graph_met == 'syn_met':
-        ev = syn_graph_met(m_img, segments, lambda_coff=lambda_coff, dist_hist=dist_hist)     
+        ev, distance_matrix = syn_graph_met(m_img, segments, lambda_coff=lambda_coff, dist_hist=dist_hist)
         
     else:
         warnings.warn('Warning Message: graph_met argument missing')
-        
-        
-            
+
+
     if admm_met == 'admm':
         sp_label = admm(n_vector=ev, n_iter=n_iter, num_cuts=num_cuts)
 
@@ -236,8 +235,8 @@ def before_method(img_path, sp_met='felzenszwalb', graph_met='syn_met', admm_met
         ev1, ev, ev3 = vectors[:, index1], vectors[:, index2], vectors[:, index3]
         
     elif graph_met == 'syn_met':
-        ev = syn_graph_met(m_img, segments, lambda_coff=lambda_coff, dist_hist=dist_hist)     
-        
+        ev = syn_graph_met(m_img, segments, lambda_coff=lambda_coff, dist_hist=dist_hist)
+
     else:
         warnings.warn('Warning Message: graph_met argument missing')
         
@@ -261,13 +260,13 @@ def before_method(img_path, sp_met='felzenszwalb', graph_met='syn_met', admm_met
 def pixels_label(m_img, segments, sp_label):
     # get superpixels position
     row, col = m_img.shape[0], m_img.shape[1]
-    seg_label = []
+    seg_label = [] #超像素标签索引
     for i in range(row):
         for j in range(col):
             l = segments[i, j]
             if l not in seg_label:
                 seg_label.append(l)
-    sp_pos = []
+    sp_pos = [] #每个超像素中像素的坐标
     for i in seg_label:
         i_pos = []
         for m in range(row):
@@ -276,7 +275,7 @@ def pixels_label(m_img, segments, sp_label):
                     i_pos.append([m, n])
         sp_pos.append(i_pos)
 
-    labels = []
+    labels = [] ##优化后的超像素标签
     for i in range(len(sp_label)):
         if sp_label[i] not in labels:
             labels.append(sp_label[i])
@@ -304,16 +303,16 @@ def syn_graph_met(m_img, segments, lambda_coff, dist_hist=False):
     row = image.shape[0]
     col = image.shape[1]
 #     print(row, col)
-    segmentsLabel = []
+    segmentsLabel = [] #超像素分后的标签唯一化
     for i in range(row):
         for j in range(col):
             l = segments[i, j]
             if l not in segmentsLabel:
                 segmentsLabel.append(l)
     
-    position = []
-    ave_position = []
-    flatten_position = []
+    position = []  #每一行代表同一个超像素中像素点的（x，y）坐标
+    ave_position = [] #每个超像素的坐标
+    flatten_position = []  #每一行代表同一个超像素中像素点的序号
     
     for i in segmentsLabel:
         pixel_position = []
@@ -331,7 +330,7 @@ def syn_graph_met(m_img, segments, lambda_coff, dist_hist=False):
         ave_position.append((sum(pixel_position) / len(pixel_position)).tolist())
         
     # generate average color value and red, green, blue color values
-    average = []
+    average = [] #一块超像素的平均颜色（单通道）
     red_average = []
     green_average = []
     blue_average = []
@@ -372,15 +371,15 @@ def syn_graph_met(m_img, segments, lambda_coff, dist_hist=False):
     
     # fully connected
     sigma = 255.0
-    length = len(position)
-    graph = np.zeros((length, length))
+    length = len(position)  #像素的个数
+    graph = np.zeros((length, length)) #每个点和其他点的颜色距离（dist_hist为False）/曼哈顿距离（dist_hist为Ture） 矩阵
     
     # settings for LBP
     radius = 2
     n_points = 8 * radius
     METHOD = 'uniform'
     
-    img, lbp = [], []
+    img, lbp = [], []  #img是彩色图的三通道集合，lbp是三通道的纹理不变描述
     for i in range(3):
         c_img = image[:,:,i]
         c_lbp = local_binary_pattern(c_img, n_points, radius, METHOD)
@@ -407,13 +406,13 @@ def syn_graph_met(m_img, segments, lambda_coff, dist_hist=False):
 #     print('graph construction time: ', time.time() - graph_time)    
     
     # matrix eigen-decomposition, scipy.sparse.linalg
-    vals, vectors = np.linalg.eigh(graph)
+    vals, vectors = np.linalg.eigh(graph)  #特征值及特征向量
     vals, vectors = np.real(vals), np.real(vectors)
-    index1, index2, index3 = np.argsort(vals)[0], np.argsort(vals)[1], np.argsort(vals)[2]
+    index1, index2, index3 = np.argsort(vals)[0], np.argsort(vals)[1], np.argsort(vals)[2]  # 取特征值的最小的三个
     # index1, index2, index3 = np.argsort(vals)[::-1][0], np.argsort(vals)[::-1][1], np.argsort(vals)[::-1][2]
-    ev1, ev2, ev3 = vectors[:, index1], vectors[:, index2], vectors[:, index3]
+    ev1, ev2, ev3 = vectors[:, index1], vectors[:, index2], vectors[:, index3]   #特征值对应的特征向量
     
-    return vectors[:, index1], graph
+    return vectors[:, index1], graph  #返回第一个特征向量和距离矩阵
 
 
 
@@ -423,7 +422,7 @@ def hist(position, img, lbp):
     color_hist = []
     for i in range(3):
         c_img = img[i]
-        sp_arr = np.take(c_img, position)
+        sp_arr = np.take(c_img, position)  #每一块超像素中像素点的像素值
                 
         histr, bins = np.histogram(sp_arr, bins=np.linspace(0, 256, num=21))
 #         histr = np.reshape(histr, (16, 16)) # 16 bins
@@ -449,6 +448,9 @@ def hist(position, img, lbp):
     hist = np.append(color_hist, texture_hist)
 #     print('-----hist--------', hist.shape)
     return np.append(color_hist, texture_hist)
+
+
+
     
 
 
